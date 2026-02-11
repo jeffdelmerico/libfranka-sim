@@ -11,7 +11,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
 
-from franka_sim.franka_genesis_sim import ControlMode, FrankaGenesisSim
+from franka_sim.franka_mujoco_sim import ControlMode, FrankaMujocoSim
 from franka_sim.franka_protocol import (
     COMMAND_PORT,
     Command,
@@ -54,15 +54,15 @@ class FrankaSimServer:
     Handles both TCP command communication and UDP state updates.
     """
 
-    def __init__(self, host="0.0.0.0", port=COMMAND_PORT, enable_vis=False, genesis_sim=None):
+    def __init__(self, host="0.0.0.0", port=COMMAND_PORT, enable_vis=False, mujoco_sim=None):
         """
         Initialize the Franka simulation server.
 
         Args:
             host: IP address to bind to (default: all interfaces)
             port: TCP port for command interface
-            enable_vis: Enable visualization of the Genesis simulator
-            genesis_sim: Optional pre-configured Genesis simulator instance for testing
+            enable_vis: Enable visualization of the Mujoco simulator
+            mujoco_sim: Optional pre-configured Mujoco simulator instance for testing
         """
         self.host = host
         self.port = port
@@ -80,13 +80,13 @@ class FrankaSimServer:
         self.control_mode = ControlMode.NONE
         self.connection_running = False  # New flag for per-connection state
 
-        # Initialize Genesis simulator
-        if genesis_sim is None:
+        # Initialize Mujoco simulator
+        if mujoco_sim is None:
             logger.info("Initializing simulation")
-            self.genesis_sim = FrankaGenesisSim(enable_vis=enable_vis)
+            self.mujoco_sim = FrankaMujocoSim(enable_vis=enable_vis)
             logger.info("Simulation initialized")
         else:
-            self.genesis_sim = genesis_sim
+            self.mujoco_sim = mujoco_sim
 
         self.robot_state = RobotState()
 
@@ -293,11 +293,11 @@ class FrankaSimServer:
                                 "Motion finished: Switching to position control mode \
                                     and holding current position"
                             )
-                            current_joint_positions = self.genesis_sim.get_robot_state()["q"]
-                            self.genesis_sim.set_control_mode(ControlMode.POSITION)
+                            current_joint_positions = self.mujoco_sim.get_robot_state()["q"]
+                            self.mujoco_sim.set_control_mode(ControlMode.POSITION)
                             self.control_mode = ControlMode.POSITION
-                            self.genesis_sim.update_joint_positions(current_joint_positions)
-                            self.genesis_sim.update_torques([0.0] * 7)
+                            self.mujoco_sim.update_joint_positions(current_joint_positions)
+                            self.mujoco_sim.update_torques([0.0] * 7)
 
                         # Update state to idle modes
                         self.robot_state.state["motion_generator_mode"] = 0  # kIdle
@@ -327,7 +327,7 @@ class FrankaSimServer:
                             self.current_motion_id = 0  # Reset motion ID after sending response
                         continue
 
-                    # Update Genesis simulator based on control mode
+                    # Update Mujoco simulator based on control mode
                     if (
                         self.robot_state.state["controller_mode"]
                         == LibfrankaControllerMode.kJointImpedance
@@ -336,14 +336,14 @@ class FrankaSimServer:
                     ):
                         if self.control_mode is not ControlMode.POSITION:
                             logger.info("Setting control mode to POSITION")
-                            self.genesis_sim.set_control_mode(ControlMode.POSITION)
+                            self.mujoco_sim.set_control_mode(ControlMode.POSITION)
                             self.control_mode = ControlMode.POSITION
                             # Initialize q_d to current q when first entering position mode
                             self.robot_state.state["q_d"] = self.robot_state.state["q"]
                         # Update q_d with commanded positions
                         self.robot_state.state["q_d"] = list(command["q_c"])
-                        self.genesis_sim.update_joint_positions(command["q_c"])
-                        self.genesis_sim.update_torques([0.0] * 7)
+                        self.mujoco_sim.update_joint_positions(command["q_c"])
+                        self.mujoco_sim.update_torques([0.0] * 7)
                     elif (
                         self.robot_state.state["controller_mode"]
                         == LibfrankaControllerMode.kJointImpedance
@@ -352,23 +352,23 @@ class FrankaSimServer:
                     ):
                         if self.control_mode is not ControlMode.VELOCITY:
                             logger.info("Setting control mode to VELOCITY")
-                            self.genesis_sim.set_control_mode(ControlMode.VELOCITY)
+                            self.mujoco_sim.set_control_mode(ControlMode.VELOCITY)
                             self.control_mode = ControlMode.VELOCITY
                         # Update dq_d with commanded velocities
                         self.robot_state.state["dq_d"] = list(command["dq_c"])
-                        self.genesis_sim.update_joint_velocities(command["dq_c"])
-                        self.genesis_sim.update_torques([0.0] * 7)
+                        self.mujoco_sim.update_joint_velocities(command["dq_c"])
+                        self.mujoco_sim.update_torques([0.0] * 7)
                     elif (
                         self.robot_state.state["controller_mode"]
                         == LibfrankaControllerMode.kExternalController
                     ):
                         if self.control_mode is not ControlMode.TORQUE:
                             logger.info("Setting control mode to TORQUE")
-                            self.genesis_sim.set_control_mode(ControlMode.TORQUE)
+                            self.mujoco_sim.set_control_mode(ControlMode.TORQUE)
                             self.control_mode = ControlMode.TORQUE
                         # Update tau_J_d with commanded torques
                         self.robot_state.state["tau_J_d"] = list(command["tau_J_d"])
-                        self.genesis_sim.update_torques(command["tau_J_d"])
+                        self.mujoco_sim.update_torques(command["tau_J_d"])
 
         except Exception as e:
             logger.error(f"Error in read_step: {e}")
@@ -418,24 +418,24 @@ class FrankaSimServer:
             self.robot_state.state["robot_mode"] = RobotMode.kMove
             self.current_motion_id = header.command_id
 
-            # Set appropriate control mode in Genesis simulator
+            # Set appropriate control mode in Mujoco simulator
             if (
                 move_cmd.controller_mode == ControllerMode.kJointImpedance
                 and move_cmd.motion_generator_mode == MotionGeneratorMode.kJointPosition
             ):
                 logger.info("Setting control mode to POSITION")
-                self.genesis_sim.set_control_mode(ControlMode.POSITION)
+                self.mujoco_sim.set_control_mode(ControlMode.POSITION)
                 self.control_mode = ControlMode.POSITION
             elif (
                 move_cmd.controller_mode == ControllerMode.kJointImpedance
                 and move_cmd.motion_generator_mode == MotionGeneratorMode.kJointVelocity
             ):
                 logger.info("Setting control mode to VELOCITY")
-                self.genesis_sim.set_control_mode(ControlMode.VELOCITY)
+                self.mujoco_sim.set_control_mode(ControlMode.VELOCITY)
                 self.control_mode = ControlMode.VELOCITY
             elif move_cmd.controller_mode == ControllerMode.kExternalController:
                 logger.info("Setting control mode to TORQUE")
-                self.genesis_sim.set_control_mode(ControlMode.TORQUE)
+                self.mujoco_sim.set_control_mode(ControlMode.TORQUE)
                 self.control_mode = ControlMode.TORQUE
 
             # First send motion started response
@@ -495,11 +495,11 @@ class FrankaSimServer:
             # Switch to position control and hold current position
             if self.control_mode != ControlMode.POSITION:
                 logger.info("Switching to position control mode and holding current position")
-                current_joint_positions = self.genesis_sim.get_robot_state()["q"]
-                self.genesis_sim.set_control_mode(ControlMode.POSITION)
+                current_joint_positions = self.mujoco_sim.get_robot_state()["q"]
+                self.mujoco_sim.set_control_mode(ControlMode.POSITION)
                 self.control_mode = ControlMode.POSITION
-                self.genesis_sim.update_joint_positions(current_joint_positions)
-                self.genesis_sim.update_torques([0.0] * 7)
+                self.mujoco_sim.update_joint_positions(current_joint_positions)
+                self.mujoco_sim.update_torques([0.0] * 7)
 
             # Send one final state with both modes set to idle
             if hasattr(self, "udp_socket") and self.udp_socket:
@@ -804,7 +804,7 @@ class FrankaSimServer:
             self.client_udp_port = client_udp_port
             # Initialize timing statistics
             total_cycles = 0
-            total_genesis_time = 0
+            total_mujoco_time = 0
             total_cycle_time = 0
             last_stats_time = time.time()
 
@@ -816,10 +816,10 @@ class FrankaSimServer:
                 try:
                     cycle_start = time.time()
 
-                    genesis_start = time.time()
-                    sim_state = self.genesis_sim.get_robot_state()
-                    genesis_time = time.time() - genesis_start
-                    total_genesis_time += genesis_time
+                    mujoco_start = time.time()
+                    sim_state = self.mujoco_sim.get_robot_state()
+                    mujoco_time = time.time() - mujoco_start
+                    total_mujoco_time += mujoco_time
 
                     # Initialize q_d to current q on first state update if not already set
                     if not first_state_sent:
@@ -850,21 +850,21 @@ class FrankaSimServer:
 
                     # Log statistics every second
                     if time.time() - last_stats_time >= 1.0:
-                        avg_genesis_time = (
-                            total_genesis_time / total_cycles
+                        avg_mujoco_time = (
+                            total_mujoco_time / total_cycles
                         ) * 1000  # Convert to ms
                         avg_cycle_time = (total_cycle_time / total_cycles) * 1000  # Convert to ms
                         freq = total_cycles / (time.time() - last_stats_time)
 
                         logger.info(
                             f"State Update Stats - Freq: {freq:.1f}Hz, "
-                            f"Genesis Time: {avg_genesis_time:.2f}ms, "
+                            f"Mujoco Time: {avg_mujoco_time:.2f}ms, "
                             f"Total Cycle: {avg_cycle_time:.2f}ms"
                         )
 
                         # Reset statistics
                         total_cycles = 0
-                        total_genesis_time = 0
+                        total_mujoco_time = 0
                         total_cycle_time = 0
                         last_stats_time = time.time()
 
@@ -960,31 +960,31 @@ class FrankaSimServer:
             self.cleanup()
 
     def start(self):
-        """Start the TCP server and Genesis simulator"""
+        """Start the TCP server and Mujoco simulator"""
         try:
             self.running = True
             logger.info("Starting server and simulation")
 
-            # Initialize Genesis simulator first
-            self.genesis_sim.initialize_simulation()
-            logger.info("Genesis simulation initialized")
+            # Initialize Mujoco simulator first
+            self.mujoco_sim.initialize_simulation()
+            logger.info("Mujoco simulation initialized")
 
-            if self.genesis_sim.enable_vis:
+            if self.mujoco_sim.enable_vis:
                 # Run server in a background thread when visualization is enabled
                 server_thread = threading.Thread(target=self.run_server)
                 server_thread.daemon = True
                 server_thread.start()
                 logger.info("Server running in background thread")
 
-                # Start Genesis simulator (visualization) in main thread
-                logger.info("Starting Genesis simulator with visualization")
-                self.genesis_sim.start()
+                # Start Mujoco simulator (visualization) in main thread
+                logger.info("Starting Mujoco simulator with visualization")
+                self.mujoco_sim.start()
             else:
                 # Without visualization, run server in main thread
                 logger.info("Starting TCP/UDP server")
                 self.run_server()
-                # Start Genesis simulator without visualization
-                self.genesis_sim.start()
+                # Start Mujoco simulator without visualization
+                self.mujoco_sim.start()
 
         except Exception as e:
             logger.error(f"Server start error: {e}", exc_info=True)
@@ -1058,8 +1058,8 @@ class FrankaSimServer:
         self.connection_running = False
         self.transmitting_state = False
         self.cleanup()
-        # Stop Genesis simulator
-        self.genesis_sim.stop()
+        # Stop Mujoco simulator
+        self.mujoco_sim.stop()
 
 
 def main():
@@ -1069,7 +1069,7 @@ def main():
         "--vis",
         action="store_true",
         default=False,
-        help="Enable visualization of the Genesis simulator",
+        help="Enable visualization of the Mujoco simulator",
     )
     args = parser.parse_args()
 
