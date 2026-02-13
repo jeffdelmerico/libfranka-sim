@@ -9,10 +9,14 @@ requires-python = ">=3.8"
 dynamic = ["version"]  # Use dynamic versioning from git tags
 dependencies = [
     "numpy==1.26.4",
-    "genesis-world==0.2.1",
+    # "genesis-world==0.2.1",
     "numba==0.60.0",
-    "torch>=2.0.0",
-    "pytest"
+    # "torch>=2.0.0",
+    "robot_descriptions",
+    "mujoco==3.3.7",
+    "pylibfranka",
+    "pytest",
+    "pytest-cov"
 ]
 readme = "README.md"
 authors = [
@@ -49,7 +53,6 @@ dev = [
     "flake8-docstrings>=1.7.0",
     "pytest>=8.0.0",
     "pytest-cov>=4.1.0",
-
 ]
 
 [tool.setuptools]
@@ -72,7 +75,7 @@ ensure_newline_before_comments = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-addopts = "-v --cov=franka_sim --cov-report=term-missing"
+addopts = ["-v", "--cov=franka_sim", "--cov-report=term-missing"]
 
 [tool.setuptools_scm]
 # This will get the version from the most recent git tag

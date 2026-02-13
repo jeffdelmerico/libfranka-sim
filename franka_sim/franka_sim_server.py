@@ -69,7 +69,7 @@ class FrankaSimServer:
         self.server_socket = None
         self.running = False
         self.transmitting_state = False
-        self.library_version = 9  # Current libfranka version
+        self.library_version = 20 #9  # Current libfranka version
         self.command_socket = None  # UDP socket for receiving commands
         self.current_motion_id = 0
         self.client_socket = None

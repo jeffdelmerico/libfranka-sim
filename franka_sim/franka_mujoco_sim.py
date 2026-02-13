@@ -59,6 +59,7 @@ class FrankaMujocoSim:
             self.running = False
 
     def initialize_simulation(self):
+        logger.info("Initializing simulation.")
         # Create scene
         self.renderer = mj.Renderer(self.model)
         mj.mj_forward(self.model, self.data)
@@ -132,6 +133,7 @@ class FrankaMujocoSim:
         self.prev_dq_full = np.zeros(7)
         self.ddq_filtered = np.zeros(7)
         alpha_acc = 0.95
+        logger.info("Starting simulation loop.")
 
         while self.running:
             # Get current joint states
@@ -194,33 +196,33 @@ class FrankaMujocoSim:
         # q_d is the desired joint positions user sent joint positions
         q_d = self.latest_joint_positions
 
-        q_full = self.franka.get_dofs_position(self.dofs_idx).cpu().numpy()
-        dq_full = self.franka.get_dofs_velocity(self.dofs_idx).cpu().numpy()
+        q_full = self.data.qpos
+        dq_full = self.data.qvel
         # calculate ddq_full
         ddq_full = self.ddq_filtered
 
         # Get end-effector position and orientation
-        hand_link = self.franka.get_link("hand")
-        ee_pos = hand_link.get_pos().cpu().numpy()
-        ee_quat = hand_link.get_quat().cpu().numpy()  # [w, x, y, z]
+        # hand_link = self.model.get_link("hand")
+        # ee_pos = hand_link.get_pos().cpu().numpy()
+        # ee_quat = hand_link.get_quat().cpu().numpy()  # [w, x, y, z]
 
-        # Convert quaternion to rotation matrix
-        w, x, y, z = ee_quat
-        R = np.array(
-            [
-                [1 - 2 * y * y - 2 * z * z, 2 * x * y - 2 * w * z, 2 * x * z + 2 * w * y],
-                [2 * x * y + 2 * w * z, 1 - 2 * x * x - 2 * z * z, 2 * y * z - 2 * w * x],
-                [2 * x * z - 2 * w * y, 2 * y * z + 2 * w * x, 1 - 2 * x * x - 2 * y * y],
-            ]
-        )
+        # # Convert quaternion to rotation matrix
+        # w, x, y, z = ee_quat
+        # R = np.array(
+        #     [
+        #         [1 - 2 * y * y - 2 * z * z, 2 * x * y - 2 * w * z, 2 * x * z + 2 * w * y],
+        #         [2 * x * y + 2 * w * z, 1 - 2 * x * x - 2 * z * z, 2 * y * z - 2 * w * x],
+        #         [2 * x * z - 2 * w * y, 2 * y * z + 2 * w * x, 1 - 2 * x * x - 2 * y * y],
+        #     ]
+        # )
 
-        # Construct homogeneous transformation matrix
-        O_T_EE = np.eye(4)
-        O_T_EE[:3, :3] = R
-        O_T_EE[:3, 3] = ee_pos
+        # # Construct homogeneous transformation matrix
+        # O_T_EE = np.eye(4)
+        # O_T_EE[:3, :3] = R
+        # O_T_EE[:3, 3] = ee_pos
 
-        # Convert to column-major 16-element array
-        O_T_EE = O_T_EE.T.flatten()
+        # # Convert to column-major 16-element array
+        # O_T_EE = O_T_EE.T.flatten()
 
         # Return only the first 7 joints (excluding fingers)
         return {
@@ -231,7 +233,7 @@ class FrankaMujocoSim:
             "dq_d": dq_full[:7],
             "ddq_d": ddq_full[:7],
             "tau_J": self.latest_torques,  # Current commanded torques
-            "O_T_EE": O_T_EE,  # End-effector pose in base frame (column-major)
+            # "O_T_EE": O_T_EE,  # End-effector pose in base frame (column-major)
         }
 
 

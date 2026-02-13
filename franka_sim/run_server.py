@@ -17,9 +17,10 @@ def main():
         "--vis",
         action="store_true",
         default=False,
-        help="Enable visualization of the Genesis simulator",
+        help="Enable visualization of the simulator",
     )
     args = parser.parse_args()
+    logging.basicConfig(level=logging.DEBUG)
 
     print(f"Starting Franka Simulation Server {'with' if args.vis else 'without'} visualization")
     print("Connect to the server using 'localhost' or '127.0.0.1' as the robot IP address")
