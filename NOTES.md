@@ -48,3 +48,12 @@ source .venv/bin/activate
 uv pip install pylibfranka mujoco==3.3.7
 uv pip install -e .
 ```
+
+FR3 Joint Limits (rad):
+A1: -2.8972 : +2.8972
+A2: -1.8326 : +1.8326
+A3: -2.8972 : +2.8972
+A4: −3.0718 : −0.1222
+A5: −2.8797 : +2.8797
+A6: +0.4363 : +4.6251
+A7: -3.0543 : +3.0543

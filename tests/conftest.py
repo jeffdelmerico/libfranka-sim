@@ -42,16 +42,16 @@ def wait_for_server(port, max_retries=20, retry_delay=0.2):
 
 
 @pytest.fixture
-def mock_genesis_sim():
-    """Fixture that provides a mocked Genesis simulator"""
+def mock_sim():
+    """Fixture that provides a mocked simulator"""
     mock_sim = Mock()
     mock_sim.get_robot_state.return_value = MOCK_ROBOT_STATE
     return mock_sim
 
 
 @pytest.fixture
-def sim_server(mock_genesis_sim):
-    """Fixture that provides a server with mocked Genesis simulator"""
+def sim_server(mock_sim):
+    """Fixture that provides a server with mocked simulator"""
     # First ensure no existing server is running
     try:
         test_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -64,7 +64,7 @@ def sim_server(mock_genesis_sim):
 
     from franka_sim.franka_sim_server import FrankaSimServer
 
-    server = FrankaSimServer(enable_vis=False, genesis_sim=mock_genesis_sim)
+    server = FrankaSimServer(enable_vis=False, sim=mock_sim)
     server_thread = threading.Thread(target=server.run_server)
     server_thread.daemon = True
 

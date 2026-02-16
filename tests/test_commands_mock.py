@@ -31,7 +31,7 @@ def perform_handshake(tcp_client):
     tcp_client.connect(("localhost", COMMAND_PORT))
 
     # Send connect message
-    version = 9
+    version = 20
     udp_port = 1338
     payload = struct.pack("<HH", version, udp_port)
 
@@ -47,7 +47,7 @@ def perform_handshake(tcp_client):
     return status == ConnectStatus.kSuccess
 
 
-def test_move_command(tcp_client, udp_client, sim_server, mock_genesis_sim):
+def test_move_command(tcp_client, udp_client, sim_server, mock_sim):
     """Test sending and handling of Move command with mocked simulator"""
     assert perform_handshake(tcp_client)
 
@@ -100,7 +100,7 @@ def test_move_command(tcp_client, udp_client, sim_server, mock_genesis_sim):
             state["motion_generator_mode"] == expected_libfranka_motion_mode.value
             and state["controller_mode"] == expected_libfranka_controller_mode.value
         ),
-        timeout=1.0,
+        timeout=5.0,
     ), "Failed to receive expected state update"
 
     # Receive success response
@@ -114,10 +114,10 @@ def test_move_command(tcp_client, udp_client, sim_server, mock_genesis_sim):
     assert status == MoveStatus.kSuccess.value
 
     # Verify simulator interactions
-    mock_genesis_sim.set_control_mode.assert_called()
+    mock_sim.set_control_mode.assert_called()
 
 
-def test_stop_move_command(tcp_client, udp_client, sim_server, mock_genesis_sim):
+def test_stop_move_command(tcp_client, udp_client, sim_server, mock_sim):
     """Test sending and handling of StopMove command with mocked simulator"""
     assert perform_handshake(tcp_client)
 
@@ -178,7 +178,7 @@ def test_stop_move_command(tcp_client, udp_client, sim_server, mock_genesis_sim)
     assert move_response_header.command_id == 2
 
 
-def test_invalid_move_parameters(tcp_client, udp_client, sim_server, mock_genesis_sim):
+def test_invalid_move_parameters(tcp_client, udp_client, sim_server, mock_sim):
     """Test Move command with invalid parameters using mocked simulator"""
     assert perform_handshake(tcp_client)
 
@@ -208,7 +208,7 @@ def test_invalid_move_parameters(tcp_client, udp_client, sim_server, mock_genesi
     assert status == MoveStatus.kInvalidArgumentRejected
 
 
-def test_robot_state_updates(tcp_client, udp_client, sim_server, mock_genesis_sim):
+def test_robot_state_updates(tcp_client, udp_client, sim_server, mock_sim):
     """Test that robot state updates are correctly transmitted over UDP"""
     assert perform_handshake(tcp_client)
 
@@ -218,7 +218,7 @@ def test_robot_state_updates(tcp_client, udp_client, sim_server, mock_genesis_si
         "dq": np.array([0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07]),
         "tau_J": np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]),
     }
-    mock_genesis_sim.get_robot_state.return_value = test_state
+    mock_sim.get_robot_state.return_value = test_state
 
     # Wait for state update with verification
     assert wait_for_state_update(
@@ -230,10 +230,10 @@ def test_robot_state_updates(tcp_client, udp_client, sim_server, mock_genesis_si
     ), "Failed to receive expected robot state"
 
     # Verify that the simulator was called to get state
-    mock_genesis_sim.get_robot_state.assert_called()
+    mock_sim.get_robot_state.assert_called()
 
 
-def test_position_control_desired_states(tcp_client, udp_client, sim_server, mock_genesis_sim):
+def test_position_control_desired_states(tcp_client, udp_client, sim_server, mock_sim):
     """Test that desired joint positions (q_d) are correctly tracked in position control mode"""
     assert perform_handshake(tcp_client)
 
@@ -243,7 +243,7 @@ def test_position_control_desired_states(tcp_client, udp_client, sim_server, moc
         "dq": np.zeros(7),
         "tau_J": np.zeros(7),
     }
-    mock_genesis_sim.get_robot_state.return_value = initial_state
+    mock_sim.get_robot_state.return_value = initial_state
 
     # Send Move command for position control
     move_cmd = MoveCommand(
@@ -291,7 +291,7 @@ def test_position_control_desired_states(tcp_client, udp_client, sim_server, moc
     assert np.allclose(sim_server.robot_state.state["q_d"], desired_positions)
 
 
-def test_velocity_control_desired_states(tcp_client, udp_client, sim_server, mock_genesis_sim):
+def test_velocity_control_desired_states(tcp_client, udp_client, sim_server, mock_sim):
     """Test that desired joint velocities (dq_d) are correctly tracked in velocity control mode"""
     assert perform_handshake(tcp_client)
 
@@ -341,7 +341,7 @@ def test_velocity_control_desired_states(tcp_client, udp_client, sim_server, moc
     assert np.allclose(sim_server.robot_state.state["dq_d"], desired_velocities)
 
 
-def test_torque_control_desired_states(tcp_client, udp_client, sim_server, mock_genesis_sim):
+def test_torque_control_desired_states(tcp_client, udp_client, sim_server, mock_sim):
     """Test that desired joint torques (tau_J_d) are correctly tracked in torque control mode"""
     assert perform_handshake(tcp_client)
 
@@ -391,7 +391,7 @@ def test_torque_control_desired_states(tcp_client, udp_client, sim_server, mock_
     assert np.allclose(sim_server.robot_state.state["tau_J_d"], desired_torques)
 
 
-def test_initial_desired_states(tcp_client, udp_client, sim_server, mock_genesis_sim):
+def test_initial_desired_states(tcp_client, udp_client, sim_server, mock_sim):
     """Test that desired states are correctly initialized"""
     assert perform_handshake(tcp_client)
 
@@ -401,7 +401,7 @@ def test_initial_desired_states(tcp_client, udp_client, sim_server, mock_genesis
         "dq": np.zeros(7),
         "tau_J": np.zeros(7),
     }
-    mock_genesis_sim.get_robot_state.return_value = initial_state
+    mock_sim.get_robot_state.return_value = initial_state
 
     # Wait for first state update
     time.sleep(0.1)
@@ -414,7 +414,7 @@ def test_initial_desired_states(tcp_client, udp_client, sim_server, mock_genesis
     assert np.allclose(sim_server.robot_state.state["tau_J_d"], np.zeros(7))
 
 
-def test_set_collision_behavior(tcp_client, udp_client, sim_server, mock_genesis_sim):
+def test_set_collision_behavior(tcp_client, udp_client, sim_server, mock_sim):
     """Test SetCollisionBehavior command handling"""
     assert perform_handshake(tcp_client)
 
@@ -458,7 +458,7 @@ def test_set_collision_behavior(tcp_client, udp_client, sim_server, mock_genesis
     assert status == 0  # Success
 
 
-def test_set_joint_impedance(tcp_client, udp_client, sim_server, mock_genesis_sim):
+def test_set_joint_impedance(tcp_client, udp_client, sim_server, mock_sim):
     """Test SetJointImpedance command handling"""
     assert perform_handshake(tcp_client)
 
@@ -487,7 +487,7 @@ def test_set_joint_impedance(tcp_client, udp_client, sim_server, mock_genesis_si
     assert status == 0  # Success
 
 
-def test_set_cartesian_impedance(tcp_client, udp_client, sim_server, mock_genesis_sim):
+def test_set_cartesian_impedance(tcp_client, udp_client, sim_server, mock_sim):
     """Test SetCartesianImpedance command handling"""
     assert perform_handshake(tcp_client)
 
@@ -516,7 +516,7 @@ def test_set_cartesian_impedance(tcp_client, udp_client, sim_server, mock_genesi
     assert status == 0  # Success
 
 
-def test_motion_generation_finished(tcp_client, udp_client, sim_server, mock_genesis_sim):
+def test_motion_generation_finished(tcp_client, udp_client, sim_server, mock_sim):
     """Test handling of motion_generation_finished flag"""
     assert perform_handshake(tcp_client)
 

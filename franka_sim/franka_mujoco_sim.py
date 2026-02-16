@@ -51,6 +51,8 @@ class FrankaMujocoSim:
             self.model = load_robot_description(f"{self.model_name}_mj_description")
         self.data = mj.MjData(self.model)
         self.viewer = None
+        if self.enable_vis:
+            self.viewer = viewer.launch_passive(self.model, self.data, key_callback=self.key_callback)
 
         logger.info(f"Loaded FR3 model: {self.model}")
 
@@ -64,7 +66,6 @@ class FrankaMujocoSim:
         self.renderer = mj.Renderer(self.model)
         mj.mj_forward(self.model, self.data)
         self.renderer.update_scene(self.data)
-        self.viewer = viewer.launch_passive(self.model, self.data, key_callback=self.key_callback)
 
 
         # Joint names and indices
@@ -87,20 +88,26 @@ class FrankaMujocoSim:
         #     upper=np.array([87, 87, 87, 87, 12, 12, 12, 100, 100]),
         #     dofs_idx_local=self.dofs_idx,
         # )
-    
 
+        # For numerical differentiation
+        self.prev_dq_full = np.zeros(7)
+        self.ddq_filtered = np.zeros(7)
+        self.alpha_acc = 0.95
+    
         # Initialize to default position
         initial_q = np.array([0.0, 0.0, 0.0, -1.57, 0.0, 1.57, 0.785])
         # Set the initial position as the target position for the controller
         with self.joint_position_lock:
             self.latest_joint_positions = initial_q.copy()
 
-        for _ in range(100):
+        for _ in range(1000):
             # self.franka.set_dofs_position(np.concatenate([initial_q, [0.04,
             # 0.04]]), self.dofs_idx)
-            self.data.qpos = initial_q
-            mj.mj_step(self.model, self.data)
-            self.viewer.sync()
+            self.data.ctrl = initial_q
+            self.simulation_step()
+            # mj.mj_step(self.model, self.data)
+            if self.viewer:
+                self.viewer.sync()
 
     def set_control_mode(self, mode: ControlMode):
         """Set the control mode for the robot"""
@@ -126,54 +133,57 @@ class FrankaMujocoSim:
         with self.joint_velocity_lock:
             self.latest_joint_velocities = np.array(velocities)
 
+    def simulation_step(self):
+        # Get current joint states
+        q_full = self.data.qpos
+        dq_full = self.data.qvel
+
+        # Calculate acceleration
+        ddq_raw = (dq_full - self.prev_dq_full) / self.dt
+        self.ddq_filtered = self.alpha_acc * self.ddq_filtered + (1 - self.alpha_acc) * ddq_raw
+        self.prev_dq_full = dq_full.copy()
+
+        # Get current control mode
+        with self.control_mode_lock:
+            current_mode = self.control_mode
+
+        # Apply control based on mode
+        if current_mode == ControlMode.POSITION:
+            with self.joint_position_lock:
+                q_d = self.latest_joint_positions.copy()
+            # q_cmd = np.concatenate([q_d, [0.04, 0.04]])
+            q_cmd = q_d
+            self.data.ctrl = q_cmd
+
+        elif current_mode == ControlMode.VELOCITY:
+            with self.joint_velocity_lock:
+                dq_d = self.latest_joint_velocities.copy()
+            # dq_cmd = np.concatenate([dq_d, [0.0, 0.0]])
+            dq_cmd = dq_d
+            self.data.ctrl = self.data.qpos + self.model.opt.timestep * dq_cmd
+            print(f"dq_cmd: {dq_cmd}")
+            print(f"ctrl: {self.data.ctrl}")
+
+        elif current_mode == ControlMode.TORQUE:
+            with self.torque_lock:
+                tau_d = self.latest_torques.copy()
+            # tau_cmd = np.concatenate([tau_d, [0.0, 0.0]])
+            self.tau_cmd = tau_d 
+            self.data.qfrc_applied = self.tau_cmd
+
+        # Step simulation
+        mj.mj_step(self.model, self.data)
+        if self.viewer:
+            self.viewer.sync()
+
+
     def run_simulation(self):
         """Main simulation loop"""
 
-        # For numerical differentiation
-        self.prev_dq_full = np.zeros(7)
-        self.ddq_filtered = np.zeros(7)
-        alpha_acc = 0.95
         logger.info("Starting simulation loop.")
 
         while self.running:
-            # Get current joint states
-            q_full = self.data.qpos
-            dq_full = self.data.qvel
-
-            # Calculate acceleration
-            ddq_raw = (dq_full - self.prev_dq_full) / self.dt
-            self.ddq_filtered = alpha_acc * self.ddq_filtered + (1 - alpha_acc) * ddq_raw
-            self.prev_dq_full = dq_full.copy()
-
-            # Get current control mode
-            with self.control_mode_lock:
-                current_mode = self.control_mode
-
-            # Apply control based on mode
-            if current_mode == ControlMode.POSITION:
-                with self.joint_position_lock:
-                    q_d = self.latest_joint_positions.copy()
-                # q_cmd = np.concatenate([q_d, [0.04, 0.04]])
-                q_cmd = q_d
-                self.data.qpos = q_cmd
-
-            elif current_mode == ControlMode.VELOCITY:
-                with self.joint_velocity_lock:
-                    dq_d = self.latest_joint_velocities.copy()
-                # dq_cmd = np.concatenate([dq_d, [0.0, 0.0]])
-                dq_cmd = dq_d
-                self.data.qvel = dq_cmd
-
-            elif current_mode == ControlMode.TORQUE:
-                with self.torque_lock:
-                    tau_d = self.latest_torques.copy()
-                # tau_cmd = np.concatenate([tau_d, [0.0, 0.0]])
-                self.tau_cmd = tau_d 
-                self.data.qfrc_applied = tau_cmd
-
-            # Step simulation
-            mj.mj_step(self.model, self.data)
-            self.viewer.sync()
+            self.simulation_step()
 
             # Optional: Add small sleep to prevent too high CPU usage
             time.sleep(0.001)
@@ -189,7 +199,8 @@ class FrankaMujocoSim:
     def stop(self):
         """Stop the simulation"""
         self.running = False
-        self.viewer.close()
+        if self.viewer:
+            self.viewer.close()
 
     def get_robot_state(self):
         """Get current robot state for network transmission"""

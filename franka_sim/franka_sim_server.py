@@ -32,7 +32,8 @@ from franka_sim.franka_protocol import (
 from franka_sim.robot_state import RobotState
 
 # Configure detailed logging for debugging
-logging.basicConfig(level=logging.ERROR, format="%(asctime)s - %(levelname)s - %(message)s")
+# logging.basicConfig(level=logging.ERROR, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -54,7 +55,7 @@ class FrankaSimServer:
     Handles both TCP command communication and UDP state updates.
     """
 
-    def __init__(self, host="0.0.0.0", port=COMMAND_PORT, enable_vis=False, mujoco_sim=None):
+    def __init__(self, host="0.0.0.0", port=COMMAND_PORT, enable_vis=False, sim=None):
         """
         Initialize the Franka simulation server.
 
@@ -62,7 +63,7 @@ class FrankaSimServer:
             host: IP address to bind to (default: all interfaces)
             port: TCP port for command interface
             enable_vis: Enable visualization of the Mujoco simulator
-            mujoco_sim: Optional pre-configured Mujoco simulator instance for testing
+            sim: Optional pre-configured Mujoco simulator instance for testing
         """
         self.host = host
         self.port = port
@@ -81,12 +82,12 @@ class FrankaSimServer:
         self.connection_running = False  # New flag for per-connection state
 
         # Initialize Mujoco simulator
-        if mujoco_sim is None:
+        if sim is None:
             logger.info("Initializing simulation")
             self.mujoco_sim = FrankaMujocoSim(enable_vis=enable_vis)
             logger.info("Simulation initialized")
         else:
-            self.mujoco_sim = mujoco_sim
+            self.mujoco_sim = sim
 
         self.robot_state = RobotState()
 
@@ -285,6 +286,7 @@ class FrankaSimServer:
 
                 # Process newest command if we have one
                 if command and command["message_id"] > 0:
+                    logger.info(f'Received command: {command}')
                     # Check if motion is finished
                     if command["motion_generation_finished"]:
                         # Switch to position control and hold current position
