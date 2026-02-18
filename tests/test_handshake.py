@@ -13,7 +13,7 @@ def test_successful_handshake(tcp_client, sim_server, mock_sim):
     tcp_client.connect(("localhost", COMMAND_PORT))
 
     # Create connect message
-    version = 20  # Current libfranka version
+    version = 10  # Current libfranka version
     udp_port = 1338  # Test UDP port
     payload = struct.pack("<HH", version, udp_port)
 

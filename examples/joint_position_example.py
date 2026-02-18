@@ -5,10 +5,12 @@
 
 import argparse
 import time
+import logging
 
 import numpy as np
 
-from pylibfranka import ControllerMode, JointPositions, Robot
+from pylibfranka import ControllerMode, JointPositions, RealtimeConfig, Robot
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
 def main():
@@ -19,7 +21,7 @@ def main():
 
     print("Opening connection to robot")
     # Connect to robot
-    robot = Robot(args.ip)
+    robot = Robot(args.ip, RealtimeConfig.kIgnore)
     print("Trying to read robot state")
     print(f"{robot.read_once()}")
 

@@ -33,7 +33,7 @@ from franka_sim.robot_state import RobotState
 
 # Configure detailed logging for debugging
 # logging.basicConfig(level=logging.ERROR, format="%(asctime)s - %(levelname)s - %(message)s")
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -70,7 +70,7 @@ class FrankaSimServer:
         self.server_socket = None
         self.running = False
         self.transmitting_state = False
-        self.library_version = 20 #9  # Current libfranka version
+        self.library_version = 10 #9  # Current libfranka version
         self.command_socket = None  # UDP socket for receiving commands
         self.current_motion_id = 0
         self.client_socket = None
